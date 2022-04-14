@@ -115,6 +115,7 @@ main()
 
 
 
-
+# Step 1: Convert wordle into function that takes in guess, returns value and method for filtering possible guesses
+# Step 2: Create agent to randomly guess among valid words
 
 
