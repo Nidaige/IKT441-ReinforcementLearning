@@ -16,6 +16,8 @@ def generate_wordlist(N, M):
             if ok:  # if word is ok, add to list
                 lower = word.lower()
                 all_n_letter_words.append(lower)
+    if M == 0:
+        M = len(all_n_letter_words)
     for a in range(M):
         to_add = choice(all_n_letter_words)  # randomly choose a word
         all_n_letter_words.remove(to_add)  # remove from list of all N-letter words
@@ -23,22 +25,25 @@ def generate_wordlist(N, M):
     return all_m_words_to_add
 
 
-def thin_valid_guesses_from_filter(words,word_filter):
-    new_wordlist = []
-    for word in words:
-        for r in range(5):
-            if (word_filter[0][r] == word[r]) and word not in new_wordlist:  # if correct letter
-                new_wordlist.append(word)
-            elif (word_filter[1][r] in word) and word not in new_wordlist:  # if incorrectly placed letter
-                new_wordlist.append(word)
-        # check for not containing wrong letter
-        ok = True
-        for letter in word_filter[2]:
-            if letter in word:
-                ok = False
-        if ok and word not in new_wordlist:
-            new_wordlist.append(word)
-    return new_wordlist
+def thin_valid_guesses_from_filter(indices, words, word_filter):
+    indices_filtered = indices
+    for index_of_word_in_valid_guesses in indices_filtered:
+        word = words[index_of_word_in_valid_guesses]
+        removed = False
+        for letter in range(5):
+            a = word_filter[0][letter]
+            b = word_filter[1][letter]
+            c = word_filter[2][letter]
+            if a != words[index_of_word_in_valid_guesses] and not removed and a!="-":
+                removed = True
+                del indices_filtered[indices.index(index_of_word_in_valid_guesses)]
+            elif b not in words[index_of_word_in_valid_guesses] and not removed and b!="-":
+                removed = True
+                del indices_filtered[indices.index(index_of_word_in_valid_guesses)]
+            elif c in word and not removed:
+                del indices_filtered[indices.index(index_of_word_in_valid_guesses)]
+                removed = True
+    return indices_filtered
 
 
 def make_guess(guessed,truth):
@@ -62,49 +67,79 @@ def create_transition_matrix_weights(list_of_words):
         all_weights.append(1.0)
     return all_words, all_weights
 
+def choice_by_weights(weights, indices):
+    if (len(weights) <= 1) or len(indices) <= 1:
+        return 0
+    total_sum = 0
+    for i in indices:
+        total_sum += weights[i]
+    roll = random()*total_sum
+    current_sum = 0
+    for value in indices:
+        if current_sum >= roll:
+            return value
+        current_sum+=weights[value]
 
-start_time = time.time()
-wordlist = generate_wordlist(5,1500)
-list_of_words, list_of_weights = create_transition_matrix_weights(wordlist)
+
+start_time = time.time()  # time when program started
+
+wordlist, weightlist = create_transition_matrix_weights(generate_wordlist(5, 1500))  # create list of words and weights
 pre_process_time = time.time()
-guesses = wordlist
-accuracy = 0
-total = 0
+
+
+accuracy = 1
+total = 1
 discount_value = 0.99
-for epoch in range(250):
-    ground_truth = choice(wordlist)
-    guessed_words_this_round = []
-    if epoch % 25 == 0:
-        print("Epoch: ", epoch)
-    for rounds in range(6):
-        guess = choice(guesses)
-        guessed_words_this_round.append(guess)
-        if guess == ground_truth:  # if correct guess
-            accuracy += 1
-            discount_factor = discount_value
-            guessed_words_this_round.reverse()
-            for guessed_word in guessed_words_this_round:
-                list_of_weights[list_of_words.index(guessed_word)] += 5*discount_factor
-                discount_factor *= discount_value
-        filterstring = make_guess(guess,ground_truth)
-        guesses = thin_valid_guesses_from_filter(wordlist,filterstring)
-    total += 1
+epochs = 470
+reward_value = 50
+newtime = time.time()
+oldtime=time.time()
+for epoch in range(epochs):  # for each game:
+    if epoch % 25 == 0:  # print every 25th epoch
+        oldtime = newtime
+        newtime = time.time()
+        print("Epoch: ", epoch, ", Time: ",newtime-oldtime, "accuracy: ", accuracy/total)
+        print("Total correct guesses: ",accuracy-1)
+    for secret in wordlist:
+        guesses = []  # list to hold indices for each word
+        for a in range(len(wordlist)):  # create list of indices to track words + weights
+            guesses.append(a)
+        #ground_truth = secret
+        ground_truth = "print"
+        guessed_words_this_round = []
+        for rounds in range(6):  # for each round out of 6 per game:
+            guess = choice_by_weights(weightlist,guesses)  # make a guess
+            if guess == None:
+                guess = 0
+            guessed_words_this_round.append(guess)  # add guess to list of guesses for this game
+            if wordlist[int(guess)] == ground_truth:  # if correct guess
+                accuracy += 1  # increment accuracy for analytics
+                discount_factor = discount_value  # copy in discount factor
+                guessed_words_this_round.reverse()  # reverse list of made guesses so last (and correct) is first
+                for guessed_word in guessed_words_this_round:  # for each guess made this round (reversed)
+                    weightlist[guessed_word] += reward_value * discount_factor  # update weight with discount factor
+                    discount_factor *= discount_value  # update discount factor
+            filterstring = make_guess(wordlist[guess],ground_truth)  # get filter based on guess made
+            guesses = thin_valid_guesses_from_filter(guesses,wordlist,filterstring)  # get new list of valid guesses
+        total += 1  # increment total number of games
 
-tempweights = []
-tempwords = []
-for a in range(len(list_of_words)):
-    i = list_of_weights.index(max(list_of_weights))
-    print(i, list_of_weights[i],list_of_words[i])
-    tempweights.append(list_of_weights[i])
-    tempwords.append(list_of_words[i])
-    del list_of_weights[i]
-    del list_of_words[i]
-
-for a in range(len(list_of_words)):
-    print(tempwords[a], tempweights[a])
 
 execution_time = time.time()
-print("Pre-processing time: ",pre_process_time-start_time, ", Execution time at 250 epochs: ", execution_time-pre_process_time)
+tempweights = weightlist
+tempwords = wordlist
+print("Top 10 guesses: ")
+for a in range(10):
+    i = tempweights.index(max(tempweights))
+    print(tempwords[i], tempweights[i])
+    del tempwords[i]
+    del tempweights[i]
+
+
+print("Pre-processing time: ",pre_process_time-start_time, ", Execution time at ", epochs," epochs: ", execution_time-pre_process_time)
 print("Accuracy: ", (accuracy/total)*100, "%")
+file = open("weights.txt",'w')
+for a in range(len(weightlist)):
+    file.writelines(str(wordlist[a]) + ": " + str(weightlist[a]))
+
 
 
