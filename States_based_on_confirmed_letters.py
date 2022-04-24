@@ -120,7 +120,7 @@ analytics = [[], []]
 start_time = time.time()
 old_time = time.time()
 new_time = old_time
-for epoch in range(epochs):  # for each game
+for epoch in range(epochs+1):  # for each game
     if epoch % 150 == 0 and epoch != 0:  # print status each 50th epoch
         old_time = new_time
         new_time = time.time()
