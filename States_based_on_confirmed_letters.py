@@ -1,7 +1,9 @@
 import time
 from random import choice, random
 from english_words import english_words_lower_set
-import matplotlib.pyplot as plt
+from matplotlib import *
+from matplotlib import pyplot, axes
+from matplotlib.pyplot import plot, savefig
 
 
 def generate_wordset():  # generates set of words from english_words library
@@ -81,8 +83,6 @@ class Environment:  # environment class as described above
         self.possible_secrets = wordlist
         self.state_transition_matrix = {}
         self.secret = "00000"
-        self.reward = 1.0
-        self.discount = 0.95
 
     # sets the current secret, called when setting up a game
     def set_secret(self, secret):
@@ -114,14 +114,14 @@ initial_weight_per_word = 1
 list_of_words = generate_wordset()
 agent = Agent(list_of_words)
 environment = Environment(list_of_words)
-environment.set_secret("")
+environment.set_secret("")  # "" gives randomly selected secret, but any 5-letter word can be passed to manually set it
 agent.setup_weights(initial_weight_per_word)
 analytics = [[], []]
 start_time = time.time()
 old_time = time.time()
 new_time = old_time
 for epoch in range(epochs+1):  # for each game
-    if epoch % 150 == 0 and epoch != 0:  # print status each 50th epoch
+    if epoch % 250 == 0 and epoch != 0:  # print status each 50th epoch
         old_time = new_time
         new_time = time.time()
         print("Epoch: ", epoch, "current accuracy is:", (wins*100)/total_games, "%. Time spent since last checkpoint: ",
@@ -142,6 +142,8 @@ for epoch in range(epochs+1):  # for each game
             if won:
                 wins += 1
 end_time = time.time()
-plt.title("Accuracy for last 1500 games when guessing \""+environment.secret+"\"")
-plt.plot(analytics[0], analytics[1])
-plt.show()
+pyplot.title("Accuracy when guessing \""+environment.secret+"\"")
+pyplot.xlabel("Games played")
+pyplot.ylabel("Accuracy over last 250 games")
+plot(analytics[0], analytics[1])
+savefig("results/"+environment.secret+".png")
