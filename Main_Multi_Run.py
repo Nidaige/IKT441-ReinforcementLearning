@@ -8,6 +8,8 @@ from matplotlib.pyplot import plot, savefig
 
 def generate_wordset():  # generates set of words from english_words library
     words = []
+    '''from nltk.corpus import words as nltkw
+    for word in nltkw.words('en'):'''
     for word in english_words_lower_set:  # for each word:
         if len(word) == 5:  # ensure 5 letters
             ok = True
@@ -15,20 +17,20 @@ def generate_wordset():  # generates set of words from english_words library
                 if letter in word:
                     ok = False
             if ok:
-                words.append(word)
+                words.append(word.lower())
     print("Created word list with", len(words), "words.")  # status update for number of words in list
     return words
 
 
 class Agent:  # agent class, keeps track of current knowledge and expected rewards
-    def __init__(self, wordlist):
+    def __init__(self, wordlist, discount, reward):
         self.known_words = wordlist  # list of possible guesses
         self.weights = {}  # will hold all the different weights
         self.current_knowledge = "00000"  # current knowledge. Gets reset each game - letters known
         self.current_state = "00000"  # current state. Gets reset each game
         self.guesses_this_game = []  # holds tuples of ("guess", state-at-the-time)
-        self.discount_factor = 0.99  # discount factor for rewards
-        self.reward_value = 1  # reward value before discounting
+        self.discount_factor = discount  # discount factor for rewards
+        self.reward_value = reward  # reward value before discounting
 
     def reset(self):  # resets per-game information
         self.current_knowledge = "00000"
@@ -107,43 +109,64 @@ class Environment:  # environment class as described above
         return temp_letters, temp_state
 
 
+# Set hyperparameters, initialize wordlist
 epochs = 30000  # number of games to run (currently estimated time 1 hour training)
-wins = 0
-total_games = 0
-initial_weight_per_word = 1
+initial_weight_per_word = 0.5
+rewards = 2
+discounts = 0.95
+runs = 50
 list_of_words = generate_wordset()
-agent = Agent(list_of_words)
-environment = Environment(list_of_words)
-environment.set_secret("")  # "" gives randomly selected secret, but any 5-letter word can be passed to manually set it
-agent.setup_weights(initial_weight_per_word)
-analytics = [[], []]
-start_time = time.time()
-old_time = time.time()
-new_time = old_time
-for epoch in range(epochs+1):  # for each game
-    if epoch % 250 == 0 and epoch != 0:  # print status each 50th epoch
-        old_time = new_time
-        new_time = time.time()
-        print("Epoch: ", epoch, "current accuracy is:", (wins*100)/total_games, "%. Time spent since last checkpoint: ",
-              new_time-old_time, "s", "total wins: ", wins)
-        analytics[0].append(epoch)
-        analytics[1].append(wins/total_games)
-        wins = 0
-        total_games = 0
-    agent.reset()
-    won = False
-    total_games += 1
-    for rounds in range(6):
-        if not won:
-            guess = agent.make_guess_from_weights()
-            new_letters, new_state = environment.evaluate_guess(guess, agent.current_knowledge, agent.current_state)
-            feedback = (new_letters, new_state)
-            won = agent.process_feedback(feedback)
-            if won:
-                wins += 1
-end_time = time.time()
+average_tries = 0
+average_wins = 0
+
+# Run algorithm
+for run in range(runs):
+    total_games = 0
+    tries_in_last_250 = 0
+    tries_this_game = 0
+    wins_in_last_250 = 0
+    wins_this_run = 0
+    agent = Agent(list_of_words,discounts,rewards)  # initialize agent with wordlist, discount factor and reward value
+    environment = Environment(list_of_words)  # initialize environment with wordlist
+    environment.set_secret("")  # "" gives randomly selected secret, can be set manually with 5-letter word
+    agent.setup_weights(initial_weight_per_word)  # set up agent's weights
+    analytics = [[], []]
+    start_time = time.time()
+    old_time = time.time()
+    new_time = old_time
+    for epoch in range(epochs+1):  # for each game
+        agent.reset()
+        won = False
+        total_games += 1
+        if epoch % 250 == 0 and epoch != 0:  # print status each 50th epoch
+            tries_in_last_250 = tries_this_game  #
+            tries_this_game = 0
+            old_time = new_time
+            new_time = time.time()
+            print("Epoch: ", epoch, "current accuracy is:", (wins_in_last_250*100)/total_games, "%. Time spent since last checkpoint: ", new_time-old_time, "s", "total wins: ", wins_in_last_250, "average # of tries: ",tries_in_last_250/250)
+            analytics[0].append(epoch)
+            analytics[1].append(wins_in_last_250/total_games)
+            wins_this_run = wins_in_last_250
+            wins_in_last_250 = 0
+            total_games = 0
+        for rounds in range(6):
+            if not won:
+                tries_this_game += 1
+                guess = agent.make_guess_from_weights()
+                new_letters, new_state = environment.evaluate_guess(guess, agent.current_knowledge, agent.current_state)
+                feedback = (new_letters, new_state)
+                won = agent.process_feedback(feedback)
+                if won:
+                    wins_in_last_250 += 1
+    end_time = time.time()
+    average_wins += wins_this_run
+    average_tries += tries_in_last_250
+print("Analytics")
+print("Win rate: ",average_wins/(runs*250))
+print("Average number of tries per game: ",average_tries/(runs*250))
 pyplot.title("Accuracy when guessing \""+environment.secret+"\"")
 pyplot.xlabel("Games played")
 pyplot.ylabel("Accuracy over last 250 games")
 plot(analytics[0], analytics[1])
 savefig("results/"+environment.secret+".png")
+pyplot.show()
